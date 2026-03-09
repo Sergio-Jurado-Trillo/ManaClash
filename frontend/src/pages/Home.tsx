@@ -27,10 +27,16 @@ const floatZoomGlow = {
     },
 };
 
+import { Link } from 'react-router-dom';
+
 function Home() {
     return (
         <div className="bg-gradient-to-br from-purple-900 via-gray-900 to-black text-white">
-
+            <nav className="p-4 flex justify-end space-x-4">
+                <Link to="/" className="text-white hover:text-pink-400">Home</Link>
+                <Link to="/tournaments" className="text-white hover:text-pink-400">Torneos</Link>
+                <Link to="/leaderboard" className="text-white hover:text-pink-400">Leaderboard</Link>
+            </nav>
             {/* HERO */}
             <section className="min-h-screen flex flex-col items-center justify-center text-center px-4 py-16 overflow-hidden">
                 <motion.h1
@@ -70,6 +76,7 @@ function Home() {
                     viewport={{ once: true }}
                     variants={fadeUp}
                     custom={2}
+                    onClick={() => (window.location.href = '/tournaments')}
                 >
                     Crear Torneo
                 </motion.button>

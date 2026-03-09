@@ -13,3 +13,86 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Tournament {
+  id            String    @id @default(uuid())
+  name          String
+  totalRounds   Int
+  currentRound  Int       @default(0)
+  status        TournamentStatus @default(ONGOING)
+
+  players       Player[]
+  rounds        Round[]
+
+  createdAt     DateTime  @default(now())
+}
+
+model Player {
+  id              String   @id @default(uuid())
+  name            String
+  totalPoints     Decimal  @default(0.0)
+  wins            Int      @default(0)
+  byesReceived    Int      @default(0)
+
+  tournamentId    String
+  tournament      Tournament @relation(fields: [tournamentId], references: [id])
+
+  tablePlayers    TablePlayer[]
+  opponentsAsP1   PlayerOpponent[] @relation("player1")
+  opponentsAsP2   PlayerOpponent[] @relation("player2")
+}
+
+model Round {
+  id            String   @id @default(uuid())
+  roundNumber   Int
+  isFinal       Boolean  @default(false)
+
+  tournamentId  String
+  tournament    Tournament @relation(fields: [tournamentId], references: [id])
+
+  tables        Table[]
+}
+
+model PlayerOpponent {
+  id            String   @id @default(uuid())
+  playerId1     String
+  player1       Player   @relation("player1", fields: [playerId1], references: [id], onDelete: Cascade)
+  
+  playerId2     String
+  player2       Player   @relation("player2", fields: [playerId2], references: [id], onDelete: Cascade)
+  
+  roundNumber   Int
+  tournamentId  String
+
+  @@unique([playerId1, playerId2, tournamentId])
+  @@index([playerId1, tournamentId])
+  @@index([playerId2, tournamentId])
+}
+
+model Table {
+  id          String   @id @default(uuid())
+  tableNumber Int
+
+  roundId     String
+  round       Round    @relation(fields: [roundId], references: [id])
+
+  players     TablePlayer[]
+}
+
+model TablePlayer {
+  id            String   @id @default(uuid())
+  position      Int?
+  pointsAwarded Decimal?
+  lives         Int?
+
+  tableId       String
+  table         Table    @relation(fields: [tableId], references: [id])
+
+  playerId      String
+  player        Player   @relation(fields: [playerId], references: [id])
+}
+
+enum TournamentStatus {
+  ONGOING
+  FINISHED
+}
