@@ -45,7 +45,6 @@ const TournamentPage: React.FC = () => {
             <nav className="p-4 flex justify-end space-x-4">
                 <Link to="/" className="text-white hover:text-pink-400">Home</Link>
                 <Link to="/tournaments" className="text-white hover:text-pink-400">Torneos</Link>
-                <Link to="/leaderboard" className="text-white hover:text-pink-400">Leaderboard</Link>
             </nav>
             <h1 className="text-3xl mb-4">Torneos</h1>
             <form onSubmit={create} className="mb-8 space-y-4">
@@ -73,9 +72,6 @@ const TournamentPage: React.FC = () => {
                     <li key={t.id} className="flex justify-between items-center p-4 bg-gray-800 rounded">
                         <span>{t.name} ({t.status})</span>
                         <div className="flex space-x-4">
-                            <Link to={`/tournaments/${t.id}/leaderboard`} className="text-pink-400 hover:underline">
-                                Ver leaderboard
-                            </Link>
                             <Link to={`/tournaments/${t.id}/manage`} className="text-green-400 hover:underline">
                                 Gestionar
                             </Link>

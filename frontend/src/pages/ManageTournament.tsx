@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import Table from '../components/Table';
 
 interface Player {
     id: string;
@@ -62,13 +63,8 @@ const ManageTournament: React.FC = () => {
     // trackear qué mesas ya terminaron
     const [mesasFinalizadas, setMesasFinalizadas] = useState<Set<string>>(new Set());
 
-    useEffect(() => {
-        if (!id) return;
-        fetchTournament();
-        loadRounds();
-    }, [id]);
-
     const fetchTournament = async () => {
+        if (!id) return;
         const res = await fetch(`${API_BASE}/tournaments/${id}`);
         if (res.ok) {
             const data: Tournament = await res.json();
@@ -77,12 +73,19 @@ const ManageTournament: React.FC = () => {
     };
 
     const loadRounds = async () => {
+        if (!id) return;
         const res = await fetch(`${API_BASE}/tournaments/${id}/rounds`);
         if (res.ok) {
             const data: Round[] = await res.json();
             setRounds(data);
         }
     };
+
+    useEffect(() => {
+        if (!id) return;
+        fetchTournament();
+        loadRounds();
+    }, [id]);
 
     const addPlayer = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -225,7 +228,6 @@ const ManageTournament: React.FC = () => {
             <nav className="p-4 flex justify-end space-x-4">
                 <Link to="/" className="text-white hover:text-pink-400">Home</Link>
                 <Link to="/tournaments" className="text-white hover:text-pink-400">Torneos</Link>
-                <Link to="/leaderboard" className="text-white hover:text-pink-400">Leaderboard</Link>
             </nav>
             <h1 className="text-3xl mb-4">Gestionar torneo</h1>
             {tournament && (
@@ -421,26 +423,29 @@ const ManageTournament: React.FC = () => {
 
             {tournament && tournament.currentRound > 0 && !currentRound && (
                 <div className="mb-8">
-                    <h2 className="text-2xl mb-4">Clasificación - Ronda {tournament.currentRound - 1} completada</h2>
-                    <ol className="space-y-2">
-                        {tournament.players
+                    <Table
+                        title={`Clasificación - Ronda ${tournament.currentRound - 1} completada`}
+                        players={tournament.players
                             .slice()
                             .sort((a, b) => parseFloat(b.totalPoints) - parseFloat(a.totalPoints))
-                            .map((p, idx) => (
-                                <li key={p.id} className="flex justify-between p-4 bg-gray-800 rounded">
-                                    <span>{idx + 1}. {p.name}</span>
-                                    <div className="text-right">
-                                        <div>{p.totalPoints} pts</div>
-                                        <div className="text-sm text-gray-400">{p.wins} wins</div>
-                                    </div>
-                                </li>
-                            ))}
-                    </ol>
-                    {tournament.currentRound < tournament.totalRounds && (
-                        <button onClick={startRound} className="mt-4 bg-green-500 px-6 py-2 rounded hover:bg-green-600">Siguiente ronda</button>
+                            .map((p, idx) => ({
+                                name: p.name,
+                                score: parseFloat(p.totalPoints),
+                                position: idx + 1,
+                                wins: p.wins,
+                            }))}
+                        showWins={true}
+                        compact={false}
+                    />
+                    {tournament.currentRound <= tournament.totalRounds && (
+                        <div className="text-center mt-6">
+                            <button onClick={startRound} className="mt-4 bg-green-500 px-6 py-2 rounded hover:bg-green-600 font-semibold">
+                                Siguiente ronda
+                            </button>
+                        </div>
                     )}
-                    {tournament.currentRound === tournament.totalRounds && (
-                        <div className="mt-4 p-4 bg-green-900 rounded">
+                    {tournament.status === 'FINISHED' && (
+                        <div className="mt-4 p-4 bg-green-900 rounded text-center">
                             <p className="text-lg font-bold">🏆 ¡Torneo completado!</p>
                         </div>
                     )}
@@ -449,21 +454,20 @@ const ManageTournament: React.FC = () => {
 
             {tournament && tournament.currentRound > 0 && (
                 <div className="mb-8">
-                    <h2 className="text-2xl mb-4">Clasificación general</h2>
-                    <ol className="space-y-2">
-                        {tournament.players
+                    <Table
+                        title="Clasificación General"
+                        players={tournament.players
                             .slice()
                             .sort((a, b) => parseFloat(b.totalPoints) - parseFloat(a.totalPoints))
-                            .map((p, idx) => (
-                                <li key={p.id} className="flex justify-between p-4 bg-gray-700 rounded">
-                                    <span>{idx + 1}. {p.name}</span>
-                                    <div className="text-right">
-                                        <div>{p.totalPoints} pts</div>
-                                        <div className="text-sm text-gray-300">{p.wins} wins</div>
-                                    </div>
-                                </li>
-                            ))}
-                    </ol>
+                            .map((p, idx) => ({
+                                name: p.name,
+                                score: parseFloat(p.totalPoints),
+                                position: idx + 1,
+                                wins: p.wins,
+                            }))}
+                        showWins={true}
+                        compact={true}
+                    />
                 </div>
             )}
         </div>

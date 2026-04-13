@@ -13,6 +13,7 @@ exports.TournamentsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const scoring_util_1 = require("./utils/scoring.util");
+const pairing_util_1 = require("./utils/pairing.util");
 let TournamentsService = class TournamentsService {
     constructor(prisma) {
         this.prisma = prisma;
@@ -66,68 +67,53 @@ let TournamentsService = class TournamentsService {
         });
         if (!tournament)
             throw new common_1.NotFoundException('Tournament not found');
-        if (tournament.currentRound >= tournament.totalRounds) {
+        // Determinar el número de la siguiente ronda basándose en las rondas existentes
+        const lastRound = await this.prisma.round.findFirst({
+            where: { tournamentId },
+            orderBy: { roundNumber: 'desc' },
+        });
+        const nextRoundNumber = (lastRound?.roundNumber ?? 0) + 1;
+        console.log(`[DEBUG] Last round: ${lastRound?.roundNumber ?? 'none'}, nextRoundNumber: ${nextRoundNumber}`);
+        console.log(`[DEBUG] totalRounds: ${tournament.totalRounds}`);
+        if (nextRoundNumber > tournament.totalRounds) {
             throw new common_1.BadRequestException('All rounds already finished');
         }
-        // advance round
-        const nextRoundNumber = tournament.currentRound + 1;
         const isFinal = nextRoundNumber === tournament.totalRounds;
-        // determine players for this round
-        let players = tournament.players;
+        // Fetch fresh player data with updated points
+        let players = await this.prisma.player.findMany({
+            where: { tournamentId },
+        });
+        console.log(`[DEBUG] Fetched ${players.length} players`);
+        console.log(`[DEBUG] First 3 players:`, players.slice(0, 3).map(p => ({ name: p.name, points: p.totalPoints })));
+        // Determine table assignment based on round number
+        let tableAssignment;
         if (isFinal) {
-            // Last round: top 4 by total points
-            players = [...players].sort((a, b) => Number(b.totalPoints) - Number(a.totalPoints)).slice(0, 4);
+            console.log(`[DEBUG] Using generateFinalRound`);
+            // Final round: top 4 in a single table
+            tableAssignment = (0, pairing_util_1.generateFinalRound)(players);
         }
-        else if (tournament.currentRound === 0) {
-            // First round: random shuffle
-            players = players.sort(() => Math.random() - 0.5);
+        else if (nextRoundNumber === 1) { // First round (instead of currentRound === 0)
+            console.log(`[DEBUG] Using generateRandomFirstRound`);
+            // Round 1: completely random distribution
+            tableAssignment = (0, pairing_util_1.generateRandomFirstRound)(players);
         }
         else {
-            // Swiss pairing: group by position from previous round
-            // Players who finished 1st together, 2nd together, etc.
-            const previousRound = await this.prisma.round.findFirst({
-                where: {
-                    tournamentId,
-                    roundNumber: tournament.currentRound,
-                },
-                include: {
-                    tables: {
-                        include: {
-                            players: {
-                                include: {
-                                    player: true,
-                                },
-                            },
-                        },
-                    },
-                },
+            console.log(`[DEBUG] Using generateRankedRound`);
+            // Round 2+: group by ranking (best players together)
+            const sortedByRanking = [...players].sort((a, b) => {
+                const pointsA = typeof a.totalPoints === 'string'
+                    ? parseFloat(a.totalPoints)
+                    : Number(a.totalPoints);
+                const pointsB = typeof b.totalPoints === 'string'
+                    ? parseFloat(b.totalPoints)
+                    : Number(b.totalPoints);
+                return pointsB - pointsA; // Descending order
             });
-            if (previousRound) {
-                // Group players by their position in previous round
-                const playersByPosition = new Map();
-                for (const table of previousRound.tables) {
-                    for (const tp of table.players) {
-                        const pos = tp.position || 1;
-                        if (!playersByPosition.has(pos)) {
-                            playersByPosition.set(pos, []);
-                        }
-                        playersByPosition.get(pos).push(tp.player);
-                    }
-                }
-                // Rebuild players array ordered by position groups
-                players = [];
-                for (let pos = 1; pos <= 4; pos++) {
-                    const playersAtPos = playersByPosition.get(pos) || [];
-                    // Sort by total points descending within same position
-                    playersAtPos.sort((a, b) => Number(b.totalPoints) - Number(a.totalPoints));
-                    players.push(...playersAtPos);
-                }
-            }
-            else {
-                // Fallback to points-based sorting if we can't find previous round
-                players = [...players].sort((a, b) => Number(b.totalPoints) - Number(a.totalPoints));
-            }
+            console.log(`[DEBUG] Sorted players:`, sortedByRanking.slice(0, 3).map(p => ({ name: p.name, points: p.totalPoints })));
+            tableAssignment = (0, pairing_util_1.generateRankedRound)(sortedByRanking);
         }
+        console.log(`[DEBUG] tableAssignment - tables count: ${tableAssignment.tables.length}, byePlayers count: ${tableAssignment.byePlayers.length}`);
+        // Create round record
         const round = await this.prisma.round.create({
             data: {
                 roundNumber: nextRoundNumber,
@@ -135,11 +121,14 @@ let TournamentsService = class TournamentsService {
                 tournament: { connect: { id: tournamentId } },
             },
         });
-        // create tables grouping by 4 (or less for BYE)
-        const chunkSize = 4;
+        console.log(`[DEBUG] Created round ${round.roundNumber}`);
+        // Create tables
         let tableNumber = 1;
-        for (let i = 0; i < players.length; i += chunkSize) {
-            const group = players.slice(i, i + chunkSize);
+        for (const tableGroup of tableAssignment.tables) {
+            if (tableGroup.length === 0) {
+                // Skip empty tables
+                continue;
+            }
             const table = await this.prisma.table.create({
                 data: {
                     tableNumber,
@@ -147,20 +136,45 @@ let TournamentsService = class TournamentsService {
                 },
             });
             tableNumber++;
-            for (const p of group) {
+            // Add players to table
+            for (const player of tableGroup) {
                 await this.prisma.tablePlayer.create({
                     data: {
                         table: { connect: { id: table.id } },
-                        player: { connect: { id: p.id } },
+                        player: { connect: { id: player.id } },
                     },
                 });
             }
         }
-        // update tournament currentRound
+        // Handle BYE players
+        // BYE players get a special "table" with just themselves or together
+        if (tableAssignment.byePlayers.length > 0) {
+            const byeTable = await this.prisma.table.create({
+                data: {
+                    tableNumber,
+                    round: { connect: { id: round.id } },
+                },
+            });
+            for (const player of tableAssignment.byePlayers) {
+                await this.prisma.tablePlayer.create({
+                    data: {
+                        table: { connect: { id: byeTable.id } },
+                        player: { connect: { id: player.id } },
+                    },
+                });
+            }
+        }
+        // Update tournament current round
         await this.prisma.tournament.update({
             where: { id: tournamentId },
             data: { currentRound: nextRoundNumber },
         });
+        console.log(`[DEBUG] Updated tournament currentRound to ${nextRoundNumber}`);
+        // Verify the update was successful
+        const updatedTournament = await this.prisma.tournament.findUnique({
+            where: { id: tournamentId },
+        });
+        console.log(`[DEBUG] Verification - tournament.currentRound in DB: ${updatedTournament?.currentRound}`);
         return this.getTournament(tournamentId);
     }
     async updateScore(tableId, playerId, score) {
@@ -197,12 +211,24 @@ let TournamentsService = class TournamentsService {
         });
         if (!table)
             throw new common_1.NotFoundException('Table not found');
-        // Preparar datos para calculadora de puntos
-        const playersData = table.players.map(tp => ({
-            position: tp.position,
-            isEliminated: tp.lives === 0, // 0 vidas = eliminado
-        }));
-        // Calcular puntos (pasar el número de jugadores de la mesa para detectar bye)
+        // Detectar si es una mesa de BYE (menos de 3 jugadores)
+        const isBye = table.players.length < 3;
+        let playersData;
+        if (isBye) {
+            // BYE: Asignar posición 1 a todos (ya que todos reciben puntos iguales)
+            playersData = table.players.map((tp, index) => ({
+                position: 1,
+                isEliminated: false,
+            }));
+        }
+        else {
+            // Mesa normal: usar las posiciones registradas
+            playersData = table.players.map(tp => ({
+                position: tp.position,
+                isEliminated: tp.lives === 0, // 0 vidas = eliminado
+            }));
+        }
+        // Calcular puntos
         const scoringResults = (0, scoring_util_1.calculateTablePoints)(playersData, hasTimedOut, table.players.length);
         // Actualizar puntos en la mesa
         for (let i = 0; i < table.players.length; i++) {
@@ -234,6 +260,15 @@ let TournamentsService = class TournamentsService {
         });
         if (!round)
             throw new common_1.NotFoundException('Round not found');
+        // Validar que TODAS las mesas hayan sido finalizadas
+        for (const table of round.tables) {
+            for (const tp of table.players) {
+                if (tp.pointsAwarded === null || tp.pointsAwarded === undefined) {
+                    throw new common_1.BadRequestException(`Table ${table.id} con jugador ${tp.playerId} aún no fue finalizada. Debes finalizar todas las mesas antes de terminar la ronda.`);
+                }
+            }
+        }
+        console.log(`[DEBUG] endRound - Processing round ${round.roundNumber}`);
         // update player totals
         for (const table of round.tables) {
             // Detectar si esta mesa fue un BYE (menos de 3 jugadores)
@@ -254,17 +289,25 @@ let TournamentsService = class TournamentsService {
                 }
             }
         }
-        // Checkear si el torneo debe finalizarse
-        // (si se jugaron todas las rondas)
+        console.log(`[DEBUG] endRound - Updated player points for round ${round.roundNumber}`);
+        // Get tournament to check status and update currentRound
         const tournament = await this.prisma.tournament.findUnique({
             where: { id: tournamentId }
         });
-        if (tournament && tournament.currentRound >= tournament.totalRounds) {
-            await this.prisma.tournament.update({
-                where: { id: tournamentId },
-                data: { status: 'FINISHED' },
-            });
+        if (!tournament) {
+            throw new common_1.NotFoundException('Tournament not found');
         }
+        // ✅ INCREMENTAR currentRound y comprobar si el torneo ha terminado
+        const isLastRound = round.roundNumber >= tournament.totalRounds;
+        console.log(`[DEBUG] endRound - round.roundNumber: ${round.roundNumber}, totalRounds: ${tournament.totalRounds}, isLastRound: ${isLastRound}`);
+        await this.prisma.tournament.update({
+            where: { id: tournamentId },
+            data: {
+                currentRound: round.roundNumber + 1, // ← INCREMENTAR a la siguiente ronda
+                status: isLastRound ? 'FINISHED' : 'ONGOING',
+            },
+        });
+        console.log(`[DEBUG] endRound - Tournament status: ${isLastRound ? 'FINISHED' : 'ONGOING'}`);
         return this.getTournament(tournamentId);
     }
     async listRounds(tournamentId) {
