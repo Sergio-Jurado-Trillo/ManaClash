@@ -1,0 +1,329 @@
+================================================================================
+                    GUÍA DE EJECUCIÓN DE MANACLASH EN LOCAL
+================================================================================
+
+MANACLASH - Plataforma de gestión de torneos de Commander
+
+Este documento contiene todos los pasos necesarios para ejecutar el proyecto
+ManaClash en tu máquina local. El proyecto es una aplicación fullstack con
+un backend en NestJS y un frontend en React.
+
+================================================================================
+1. REQUISITOS PREVIOS
+================================================================================
+
+Antes de comenzar, asegúrate de tener instalado en tu sistemas:
+
+✓ Node.js (versión 18 o superior recomendada)
+  Descarga desde: https://nodejs.org/
+  Verifica la instalación: node --version
+
+✓ npm (generalmente viene con Node.js)
+  Verifica la instalación: npm --version
+
+✓ PostgreSQL (base de datos)
+  Descarga desde: https://www.postgresql.org/download/
+  O usa un contenedor Docker: docker run -e POSTGRES_PASSWORD=postgre -p 5432:5432 postgres
+
+✓ Git (opcional pero recomendado)
+  Descarga desde: https://git-scm.com/
+
+✓ Editor de código (recomendado: Visual Studio Code)
+  Descarga desde: https://code.visualstudio.com/
+
+================================================================================
+2. CONFIGURACIÓN INICIAL DEL PROYECTO
+================================================================================
+
+PASO 1: Descargar/clonar el proyecto
+---
+Si tienes el proyecto como ZIP:
+  1. Extrae el archivo en la ubicación deseada
+  2. Abre una terminal en la carpeta extraída
+
+Si tienes un repositorio Git:
+  git clone <url-del-repositorio>
+  cd ManaClash
+
+PASO 2: Instalar dependencias globales
+---
+Desde la raíz del proyecto (ManaClash), ejecuta:
+  npm install
+
+Este comando instalará concurrently que es necesario para ejecutar
+el backend y frontend simultáneamente.
+
+PASO 3: Instalar dependencias del backend
+---
+Navega a la carpeta backend:
+  cd backend
+  npm install
+
+Luego regresa a la raíz:
+  cd ..
+
+PASO 4: Instalar dependencias del frontend
+---
+Navega a la carpeta frontend:
+  cd frontend
+  npm install
+
+Luego regresa a la raíz:
+  cd ..
+
+================================================================================
+3. CONFIGURACIÓN DE LA BASE DE DATOS
+================================================================================
+
+PASO 1: Crear el archivo de configuración de ambiente (.env)
+---
+En la carpeta "backend", crea un archivo llamado ".env" con el siguiente
+contenido:
+
+    DATABASE_URL="postgresql://usuario:contraseña@localhost:5432/manaclash"
+
+Reemplaza:
+  - usuario: Tu usuario de PostgreSQL (por defecto suele ser "postgres")
+  - contraseña: Tu contraseña de PostgreSQL
+  - localhost: La dirección del servidor (localhost si está en tu máquina)
+  - 5432: Puerto de PostgreSQL (por defecto 5432)
+  - manaclash: Nombre de la base de datos (puedes cambiar este nombre)
+
+Ejemplo completo:
+    DATABASE_URL="postgresql://postgres:postgre@localhost:5432/manaclash"
+
+PASO 2: Crear la base de datos en PostgreSQL
+---
+Opción A - Usando pgAdmin o DBeaver:
+  1. Abre tu gestor de PostgreSQL
+  2. Crea una nueva base de datos llamada "manaclash"
+  3. Asegúrate de que el usuario tiene permisos para acceder
+
+Opción B - Usando comando psql:
+  psql -U postgres -c "CREATE DATABASE manaclash;"
+
+PASO 3: Ejecutar las migraciones de Prisma
+---
+En la carpeta "backend", ejecuta:
+  npx prisma migrate deploy
+
+Este comando creará todas las tablas necesarias en la base de datos.
+
+NOTA: Si deseas ver la base de datos en una interfaz gráfica, ejecuta:
+  npx prisma studio
+
+Esto abrirá una interfaz web en http://localhost:5555
+
+================================================================================
+4. EJECUTAR EL PROYECTO
+================================================================================
+
+OPCIÓN A: Ejecutar backend y frontend simultáneamente (RECOMENDADO)
+---
+Desde la raíz del proyecto (ManaClash), ejecuta:
+  npm run dev
+
+Esto iniciará:
+ - Backend en: http://localhost:3000 (o el puerto configurado en main.ts)
+ - Frontend en: http://localhost:5173 (puerto por defecto de Vite)
+
+Espera a que ambos procesos se hayan iniciado correctamente.
+
+OPCIÓN B: Ejecutar cada parte por separado
+---
+En una terminal, navega al backend:
+  cd backend
+  npm run serve
+
+En otra terminal, navega al frontend:
+  cd frontend
+  npm run dev
+
+OPCIÓN C: Ejecutar en modo desarrollo (sin build)
+---
+Para desarrollo más rápido sin compilar a JavaScript:
+
+En la terminal del backend:
+  cd backend
+  npm run dev
+
+En la terminal del frontend:
+  cd frontend
+  npm run dev
+
+================================================================================
+5. ACCEDER A LA APLICACIÓN
+================================================================================
+
+Una vez que ambos procesos estén ejecutándose:
+
+Frontend (Interfaz de Usuario):
+  URL: http://localhost:5173
+  Abre esta URL en tu navegador
+
+Backend (API REST):
+  URL: http://localhost:3000
+  Disponible para realizar peticiones HTTP
+
+================================================================================
+6. COMANDOS IMPORTANTES
+================================================================================
+
+BACKEND:
+---------
+npm run build       - Compila TypeScript a JavaScript
+npm run serve       - Compila y ejecuta el backend
+npm run dev         - Ejecuta el backend en modo desarrollo
+npm run start       - Ejecuta el backend compilado
+npm test            - Ejecuta las pruebas
+
+FRONTEND:
+---------
+npm run dev         - Ejecuta en modo desarrollo
+npm run build       - Compila para producción
+npm run lint        - Verifica el código con ESLint
+npm run preview     - Previsualiza la compilación de producción
+
+PROYECTO RAÍZ:
+---------
+npm run dev         - Ejecuta backend y frontend simultáneamente
+
+PRISMA:
+---------
+npx prisma migrate deploy  - Ejecuta migraciones
+npx prisma migrate dev      - Crea nueva migración en desarrollo
+npx prisma studio          - Abre la interfaz gráfica de Prisma
+
+================================================================================
+7. SOLUCIÓN DE PROBLEMAS
+================================================================================
+
+PROBLEMA: "PostgreSQL connection refused"
+SOLUCIÓN:
+  1. Verifica que PostgreSQL esté ejecutándose
+  2. Comprueba que la DATABASE_URL en .env sea correcta
+  3. Verifica el usuario y contraseña
+  4. Asegúrate de que la base de datos existe
+
+PROBLEMA: "Puerto 5173 o 3000 ya está en uso"
+SOLUCIÓN:
+  1. Cierra otros procesos que usen ese puerto
+  2. En Windows: netstat -ano | findstr :5173
+  3. En Mac/Linux: lsof -i :5173
+  4. O cambia el puerto en los scripts
+
+PROBLEMA: "Módulos no encontrados (node_modules)"
+SOLUCIÓN:
+  1. Ejecuta npm install en backend, frontend y raíz
+  2. Elimina node_modules y package-lock.json
+  3. Vuelve a ejecutar npm install
+
+PROBLEMA: "Compilación de TypeScript con errores"
+SOLUCIÓN:
+  1. Verifica que tengas la versión correcta de Node.js
+  2. Elimina las carpetas dist/ y node_modules
+  3. Ejecuta npm install nuevamente
+
+PROBLEMA: "Las tablas de Prisma no se crean"
+SOLUCIÓN:
+  1. Verifica que la base de datos exista
+  2. Ejecuta: npx prisma migrate deploy
+  3. Si persiste, ejecuta: npx prisma migrate reset (CUIDADO: borra datos)
+
+================================================================================
+8. ESTRUCTURA DEL PROYECTO
+================================================================================
+
+ManaClash/
+├── backend/              - Código del servidor (NestJS)
+│   ├── src/
+│   │   ├── main.ts      - Punto de entrada
+│   │   ├── app.module.ts
+│   │   ├── prisma/      - Configuración de Prisma
+│   │   └── tournaments/ - Lógica de torneos
+│   ├── prisma/
+│   │   └── schema.prisma - Esquema de base de datos
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── frontend/             - Código del cliente (React)
+│   ├── src/
+│   │   ├── main.tsx     - Punto de entrada
+│   │   ├── components/  - Componentes React
+│   │   ├── pages/       - Páginas de la aplicación
+│   │   └── store/       - Estado global (Zustand, Redux, etc)
+│   ├── package.json
+│   ├── vite.config.ts   - Configuración de Vite
+│   └── tsconfig.json
+│
+├── package.json         - Scripts del proyecto
+└── README.md           - Documentación principal
+
+================================================================================
+9. VARIABLES DE AMBIENTE
+================================================================================
+
+Backend (.env):
+  DATABASE_URL              - Conexión a PostgreSQL
+  (Agrega más según necesites)
+
+Frontend (.env):
+  VITE_API_URL             - URL del backend (http://localhost:3000)
+  (Agrega más según necesites)
+
+================================================================================
+10. VERIFICACIÓN FINAL
+================================================================================
+
+Después de completar todos los pasos, verifica lo siguiente:
+
+✓ Node.js instalado:      node --version
+✓ npm instalado:          npm --version
+✓ PostgreSQL corriendo:    Puedes conectarte desde pgAdmin u otro cliente
+✓ .env configurado:       Archivo backend/.env existe con DATABASE_URL
+✓ Migraciones aplicadas:  npx prisma migrate deploy (sin errores)
+✓ Backend corriendo:      http://localhost:3000 responde
+✓ Frontend corriendo:     http://localhost:5173 abre en el navegador
+
+Si todo esto funciona correctamente, ¡tu ambiente está listo para desarrollar!
+
+================================================================================
+11. PASOS PARA COMENZAR A DESARROLLAR
+================================================================================
+
+1. Abre el proyecto en tu editor favorito (VS Code recomendado)
+2. Desde la raíz, ejecuta: npm run dev
+3. Abre http://localhost:5173 en tu navegador
+4. Comienza a editar archivos - los cambios se reflecharán automáticamente
+5. Usa la terminal para ver logs del backend y frontend
+
+================================================================================
+12. RECURSOS ÚTILES
+================================================================================
+
+Documentación oficial:
+  - Node.js: https://nodejs.org/en/docs/
+  - NestJS: https://docs.nestjs.com/
+  - React: https://react.dev/
+  - Prisma: https://www.prisma.io/docs/
+  - PostgreSQL: https://www.postgresql.org/docs/
+  - Vite: https://vitejs.dev/
+  - TypeScript: https://www.typescriptlang.org/docs/
+
+Endpoints de la API:
+  (Consulta el código en backend/src/tournaments/tournaments.controller.ts)
+
+================================================================================
+
+¿Problemas adicionales o preguntas?
+
+Consulta:
+  1. El archivo README.md en la raíz del proyecto
+  2. La carpeta docs/ si existe
+  3. Los comentarios en el código fuente
+  4. Abre un issue en el repositorio
+
+Última actualización: 2026
+Versión: 1.0
+
+================================================================================
